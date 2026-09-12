@@ -9,12 +9,16 @@ api_key = os.getenv("GEMINI_API_KEY")
 if not api_key:
     try:
         import streamlit as st
-        api_key = st.secrets["GEMINI_API_KEY"]
-    except Exception:
-        pass
+        if "GEMINI_API_KEY" in st.secrets:
+            api_key = st.secrets["GEMINI_API_KEY"]
+    except Exception as e:
+        print(f"Could not access st.secrets: {e}")
 
 if not api_key:
-    raise ValueError("GEMINI_API_KEY not found. Please check your .env file.")
+    raise ValueError(
+        "GEMINI_API_KEY not found. Checked both .env and Streamlit secrets. "
+        "Please add it in Streamlit Cloud -> Settings -> Secrets."
+    )
 
 client = genai.Client(api_key=api_key)
 
@@ -28,6 +32,8 @@ def test_connection():
         contents="Say hello in one short sentence."
     )
     return response.text
+
+
 from utils.search_engine import search_college_info
 
 
@@ -56,7 +62,6 @@ def generate_answer(user_question, search_results, college_name, location, topic
             "Could you double-check the college name, or provide more details like the city/state?"
         )
 
-    # Build a context block from search results
     sources_text = ""
     for i, r in enumerate(search_results, 1):
         sources_text += f"\nSource {i} ({r.get('url', 'unknown')}):\n{r.get('content', '')[:600]}\n"
@@ -100,7 +105,6 @@ def get_chatbot_response(user_question, chat_history):
     context = build_conversation_context(chat_history)
     parsed = parse_query(user_question, conversation_context=context)
 
-    # Case 0: Off-topic question
     if parsed.get("is_off_topic"):
         return (
             "I'm specifically designed to help with college-related questions — "
@@ -108,14 +112,12 @@ def get_chatbot_response(user_question, chat_history):
             "Feel free to ask me about any college! 🎓"
         )
 
-    # Case 1: Needs clarification (ambiguous college name, no location)
     if parsed.get("needs_clarification"):
         clarification = parsed.get("clarification_question")
         if clarification:
             return clarification
         return f"Could you tell me which city/location '{parsed.get('college_name')}' is in? There might be multiple colleges with that name."
 
-    # Case 2: No college mentioned at all (general chat/greeting)
     if not parsed.get("college_name"):
         return (
             "I'd be happy to help! Please tell me the name of the college "
@@ -123,7 +125,6 @@ def get_chatbot_response(user_question, chat_history):
             "for example, 'What are the fees at Loyola College, Chennai?'"
         )
 
-    # Case 3: We have enough info — search and answer
     college_name = parsed.get("college_name")
     location = parsed.get("location")
     topic = parsed.get("topic", "general")
@@ -135,7 +136,6 @@ def get_chatbot_response(user_question, chat_history):
     except Exception as e:
         return f"⚠️ I ran into an issue searching for information right now. Please try again in a moment. (Error: {e})"
 
-    # Case 4: Search returned nothing useful
     if not search_results or len(search_results) == 0:
         location_text = f" in {location}" if location else ""
         return (

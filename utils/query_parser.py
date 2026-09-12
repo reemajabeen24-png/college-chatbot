@@ -1,3 +1,7 @@
+import json
+from utils.chatbot import client, MODEL_NAME
+
+
 def parse_query(user_question, conversation_context=""):
     """
     Uses Gemini to extract structured info from the student's question:
